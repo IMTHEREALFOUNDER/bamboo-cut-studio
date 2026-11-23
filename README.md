@@ -35,7 +35,7 @@ The metrics report uses `collected`, `accounts` and `clips`; clip fields are `ac
 
 ## Public GitHub Actions
 
-`Studio checks` builds actual test clips, applies recipes and decodes the output. `Render montage batch` runs independently in this repository and accepts a public render-jobs URL. Set repository variable `STUDIO_SOURCE_HOST` to the exact trusted public media hostname; remote sources and the jobs JSON must use that HTTPS host with no credentials or signed query strings. Jobs are limited to 105 and each media source to 25 MiB. Artifacts expire after three days.
+`Studio checks` builds actual test clips, applies recipes and decodes the output. `Render montage batch` runs independently in this repository and accepts either a public render-jobs URL or inline jobs JSON supplied by the repository owner. Supply exactly one input; include only public media URLs. Set repository variable `STUDIO_SOURCE_HOST` to the exact trusted public media hostname; remote sources and the jobs JSON must use that HTTPS host with no credentials or signed query strings. Jobs are limited to 105 and each media source to 25 MiB. Artifacts expire after three days.
 
 Standard GitHub-hosted runners in a public repository are currently free of per-minute charges. This is subject to GitHub's limits, storage rules and acceptable-use terms, not an unlimited rendering entitlement. Calling this workflow as a reusable workflow from a private repository does not move billing to the public repository.
 

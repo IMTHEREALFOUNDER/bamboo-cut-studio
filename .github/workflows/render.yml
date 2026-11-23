@@ -4,7 +4,11 @@ on:
     inputs:
       jobs_url:
         description: 'Public HTTPS URL of a jobs JSON file on STUDIO_SOURCE_HOST'
-        required: true
+        required: false
+        type: string
+      jobs_json:
+        description: 'Alternatively paste render jobs JSON with public media URLs only'
+        required: false
         type: string
 permissions:
   contents: read
@@ -25,15 +29,20 @@ jobs:
       - name: Download public render assignments
         env:
           JOBS_URL: ${{ inputs.jobs_url }}
+          JOBS_JSON: ${{ inputs.jobs_json }}
           SOURCE_HOST: ${{ vars.STUDIO_SOURCE_HOST }}
         run: |
           node --input-type=module - <<'JS'
           import {writeFile} from 'node:fs/promises';
-          const url = new URL(process.env.JOBS_URL);
-          if (url.protocol !== 'https:' || !process.env.SOURCE_HOST || url.hostname !== process.env.SOURCE_HOST || url.username || url.password || url.search) throw new Error('Set STUDIO_SOURCE_HOST to the trusted public media host');
-          const response = await fetch(url, {redirect:'error', signal:AbortSignal.timeout(30000)});
-          if (!response.ok) throw new Error('Cannot read render assignments');
-          const text = await response.text();
+          if (Boolean(process.env.JOBS_URL) === Boolean(process.env.JOBS_JSON)) throw new Error('Supply exactly one of jobs_url or jobs_json');
+          let text = process.env.JOBS_JSON;
+          if (!text) {
+            const url = new URL(process.env.JOBS_URL);
+            if (url.protocol !== 'https:' || !process.env.SOURCE_HOST || url.hostname !== process.env.SOURCE_HOST || url.username || url.password || url.search) throw new Error('Set STUDIO_SOURCE_HOST to the trusted public media host');
+            const response = await fetch(url, {redirect:'error', signal:AbortSignal.timeout(30000)});
+            if (!response.ok) throw new Error('Cannot read render assignments');
+            text = await response.text();
+          }
           if (text.length > 262144) throw new Error('Jobs file exceeds 256 KiB');
           const jobs = JSON.parse(text);
           if (!Array.isArray(jobs) || jobs.some(j => typeof j.input !== 'string' || !j.input.startsWith('https://'))) throw new Error('Only public HTTPS media sources are accepted');
