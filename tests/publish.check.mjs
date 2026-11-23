@@ -41,3 +41,18 @@ test('rejects traversal and foreign or credential-bearing archive origins', () =
     'https://' + host + '/nested', 'https://' + host + '?token=secret']) assert.throws(() => originUrl(u, host, true));
   assert.notEqual(digest('old'), digest('new'));
 });
+
+test('slot replacement preserves other platforms, cadence and rerun identity', () => {
+  const source = {...old, due:job.due, platforms:['ig','tt']};
+  const replacement = {...job, page:source.page, platforms:['ig'], replaces:{page:source.page,path:source.path,due:source.due,caption:source.caption,platforms:['ig']}};
+  const queue = {replace:true,posts:[source]};
+  const merged = mergeManifest(queue,[replacement],paths,now);
+  assert.deepEqual(merged.posts[0].platforms,['tt']);
+  assert.deepEqual(merged.posts[1].platforms,['ig']);
+  assert.equal(merged.posts[1].due,source.due);
+  assert.equal(merged.posts.flatMap(p=>p.platforms).length,2);
+  assert.equal(mergeManifest(merged,[replacement],paths,now).posts.length,2);
+  assert.deepEqual(source.platforms,['ig','tt']);
+  assert.throws(()=>mergeManifest({replace:true,posts:[{...source,caption:'Changed since planning'}]},[replacement],paths,now));
+  assert.throws(()=>mergeManifest(queue,[{...replacement,replaces:{...replacement.replaces,platforms:['tt']}}],paths,now));
+});

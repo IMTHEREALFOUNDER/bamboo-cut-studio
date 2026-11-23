@@ -4,6 +4,7 @@ import datetime as dt
 import json
 from pathlib import Path
 import re
+import math
 from creative import CONTROL, choose, evolve
 
 CLIP = re.compile(r'(test|asmr|meme[123])-\d+-(quiz|tiers|pilot|loop|pick|meme)(?:-e([0-2]{6}))?\.mp4$')
@@ -33,8 +34,12 @@ def observations(report):
         else:
             if not all(k in row for k in ('reach', 'shares', 'saved')):
                 continue
+            if not all(type(row[k]) in (int, float) and math.isfinite(row[k]) and row[k] >= 0 for k in ('reach', 'shares', 'saved')):
+                continue
             audience = row['reach']
             quality = (row['shares'] + row['saved']) / (audience + 25)
+        if not all(isinstance(value, (int, float)) and math.isfinite(value) and value >= 0 for value in (audience, quality)):
+            continue
         records.append(dict(account=row['account'], page=page, scene=scene, recipe=recipe or CONTROL,
                             audience=audience, quality=quality, cohort=(age - 3) // 3, posted=row['posted']))
     return records

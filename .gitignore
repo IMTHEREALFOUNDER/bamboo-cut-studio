@@ -7,3 +7,5 @@ examples/*.mp4
 .env.*
 metrics*.json
 policy*.json
+.studio-work/
+.studio-state/

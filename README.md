@@ -14,7 +14,7 @@ The planner uses observational comparisons, not randomized audience experiments.
 
 ## Local use
 
-Requires Node 22+, Python 3.11+, FFmpeg and ffprobe. No npm/Python packages, registrations or paid model API are required by the tools.
+Requires Node 22+, Python 3.11+, FFmpeg and ffprobe. The editor and planner have no package dependencies. Live analytics uses the pinned Neon serverless driver (`npm ci --ignore-scripts`). No paid model API is required.
 
 ```sh
 node --test tests/*.check.mjs
@@ -66,10 +66,34 @@ The final read-before-write check reduces but cannot eliminate a race with a sep
 
 Before using per-video campaign conversions for recipe-suffixed filenames, update the private importer to recognize those filenames. The current experiment planner uses provider engagement metrics; it must not treat untracked conversions as zero.
 
-## Integration status
+## Daily measured montage
 
-This repository does not currently replace the private project's complete production pipeline. It contains the independent editor, experiment planner, public-side batch executor and optional Pages queue publisher. The publisher is implemented but has not been connected to production credentials or deployed to the live media site.
+`Daily measured montage` connects live analytics, persistent recipe choices, rendering and replacement of existing future publication slots. It is scheduled for **06:47 Moscow time**. Scheduled execution is gated by the repository variable `STUDIO_AUTOPILOT_ENABLED=true`; leave it unset until the live preview and publication checks succeed. Manual runs default to preview (`publish=false`), collect real metrics and validate edits without deploying them.
 
-To connect production, the private orchestrator must export **only public media jobs**, persist private metrics/policy, trigger this public workflow independently and receive validated outputs before passing them to the existing publisher. The jobs must encode recipe IDs in resulting media paths so subsequent observations can be attributed to the correct treatment. Existing publication slots, deduplication and source archives must be retained. Publishing credentials and private metrics must not be put into public files or artifacts.
+The Cloudflare connection was verified using `Check Cloudflare connection`. This confirms access to the existing project; it does not itself test publication or analytics access.
 
-Generating entirely new base gameplay scenes still needs the existing scene renderer or a separately published scene renderer; modifying existing clips alone does not remove that dependency. No private workflow is disabled and no social account is newly connected by this repository. Daily private metric collection and unattended experiment planning still need their production orchestration; a successful manual render or test does not activate them. A successful demo/test is not evidence that the production integration is connected.
+The analytics runner additionally needs these **Actions secrets in this repository**:
+
+| Studio secret | Same existing production value |
+| --- | --- |
+| `STUDIO_DATABASE_URL` | `PROD_DATABASE_URL` in the private project; preferably a separately scoped read-only database role with SELECT on `social_accounts` and `social_posts` |
+| `STUDIO_SOCIAL_TOKEN_KEY` | `PROD_SOCIAL_TOKEN_KEY` |
+| `STUDIO_YT_CLIENT_ID` | `PROD_YT_CLIENT_ID` |
+| `STUDIO_YT_CLIENT_SECRET` | `PROD_YT_CLIENT_SECRET` |
+
+GitHub cannot reveal or copy existing secret values between repositories. Enter the values directly in GitHub Secrets from your own credential records. Never put them in chat, public variables, source or workflow inputs. The database URL and token key together allow reading connected account tokens: only trusted maintainers should have write access to this studio. The code reads the two social tables in an enforced read-only transaction, decrypts existing tokens and refreshes YouTube grants in memory; it does not update account credentials or touch game/player tables.
+
+YouTube inventory walks the channel uploads playlist, including videos unknown to the publisher. Unknown paths and unavailable/pending analytics remain visible in the temporary report but cannot train recipes. Numeric engagement metrics must be present; missing metrics do not become zero. Instagram collects core insights and optional available watch-time metrics. No TikTok analytics, Studio-only swipe-away rates, or unexposed metrics are inferred.
+
+The cycle plans a rolling window **12–36 hours ahead**. It keeps originals as controls, edits eligible candidate/champion slots and replaces only the same page/platform/due time. Other platforms on a shared post remain intact. Already suffixed clips are never edited again. Publication rejects replacements less than six hours ahead or whose source metadata changed after planning. It does not add new posts or increase posting frequency. Existing deep-link campaign parameters are removed from replacement captions to avoid claiming attribution to the old clip; per-video conversion learning remains disabled until the private importer supports recipe paths.
+
+Raw metrics stay in the runner's temporary work directory and are deleted even after failure. No analytics artifact is uploaded. The cache contains only champion/candidate recipe IDs and retired recipes, with no video IDs, provider metrics or statistical samples. Publication uses the same serialized render concurrency group as manual batch publication. Schedule delays remain subject to GitHub's queue.
+
+### Activation and remaining boundaries
+
+1. Add the four analytics secrets; keep scheduled activation disabled.
+2. Run `Daily measured montage` with `publish=false`. Confirm live coverage and full decode checks.
+3. Run once with `publish=true`; verify the new manifest and the existing publisher importing the replacement slots.
+4. Coordinate with the old private scene workflow so it cannot write a competing manifest, then set `STUDIO_AUTOPILOT_ENABLED=true`.
+
+Generating new base scenes remains the existing renderer's responsibility. This cycle edits its upcoming source slots; it does not create a fresh source-video schedule after that queue is exhausted. An empty planning window fails with an explicit replenishment error. Neither the old private renderer nor the existing social publisher is disabled by this change. A successful test/preview is not evidence of live publication, a complete source-renderer migration or guaranteed growth.

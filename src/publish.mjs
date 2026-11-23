@@ -35,7 +35,24 @@ export function mergeManifest(live, jobs, validatedPaths, now = Date.now()) {
   if (!live.replace || !Array.isArray(live.posts) || !live.posts.length) throw new Error('Live queue is unavailable or incompatible; refusing to replace it');
   if (!Array.isArray(jobs) || !jobs.length) throw new Error('No publication jobs');
   const cutoff = now - 86400000;
-  const posts = live.posts.map(validatePost).filter(p => Date.parse(p.due) >= cutoff);
+  let posts = live.posts.map(validatePost).filter(p => Date.parse(p.due) >= cutoff).map(p => ({...p, platforms: [...p.platforms]}));
+  // Replace only explicitly identified future platform slots, never append a second post to them.
+  for (const job of jobs) {
+    if (!job.replaces) continue;
+    const replacement = job.replaces;
+    validatePost(replacement);
+    if (replacement.path === job.output || replacement.page !== job.page || replacement.due !== job.due ||
+        JSON.stringify(replacement.platforms) !== JSON.stringify(job.platforms) || Date.parse(job.due) < now + 6 * 3600000 || !validatedPaths.has(job.output)) throw new Error('Unsafe slot replacement');
+    const prior = posts.find(p => p.page === replacement.page && p.path === replacement.path && p.due === replacement.due && p.caption === replacement.caption && replacement.platforms.every(platform => p.platforms.includes(platform)));
+    if (!prior) {
+      // A successful previous run may already have replaced this exact publication.
+      const done = posts.find(p => p.page === job.page && p.path === job.output && p.due === job.due && p.caption === job.caption && job.platforms.every(platform => p.platforms.includes(platform)));
+      if (done) continue;
+      throw new Error('Source publication changed or disappeared; refusing replacement');
+    }
+    prior.platforms = prior.platforms.filter(platform => !replacement.platforms.includes(platform));
+    posts = posts.filter(p => p.platforms.length);
+  }
   const have = new Map(posts.flatMap(p => p.platforms.map(platform => [`${p.page}|${p.path}|${platform}`, p])));
   for (const job of jobs) {
     const post = validatePost({page: job.page, path: job.output, caption: job.caption, due: job.due, platforms: job.platforms});
