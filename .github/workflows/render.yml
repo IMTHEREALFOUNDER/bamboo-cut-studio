@@ -10,6 +10,11 @@ on:
         description: 'Alternatively paste render jobs JSON with public media URLs only'
         required: false
         type: string
+      publish:
+        description: 'Publish valid future jobs to the live posting queue (requires configured Cloudflare credentials)'
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -52,6 +57,14 @@ jobs:
         env:
           SOURCE_HOST: ${{ vars.STUDIO_SOURCE_HOST }}
         run: node src/cli.mjs --jobs jobs.json --out dist --allow-host "$SOURCE_HOST"
+      - name: Publish to the existing media queue
+        if: inputs.publish == true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          SOURCE_HOST: ${{ vars.STUDIO_SOURCE_HOST }}
+          PAGES_PROJECT: ${{ vars.STUDIO_PAGES_PROJECT || 'bamboo-cut-media' }}
+        run: node src/publish.mjs --root dist --jobs jobs.json --base "https://$SOURCE_HOST" --project "$PAGES_PROJECT"
       - uses: actions/upload-artifact@v4
         with:
           name: montage-batch-${{ github.run_id }}

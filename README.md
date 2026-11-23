@@ -17,7 +17,7 @@ The planner uses observational comparisons, not randomized audience experiments.
 Requires Node 22+, Python 3.11+, FFmpeg and ffprobe. No npm/Python packages, registrations or paid model API are required by the tools.
 
 ```sh
-node --test tests/edit.check.mjs
+node --test tests/*.check.mjs
 python -m unittest discover -s tests -p 'test_*.py' -v
 node src/cli.mjs --jobs examples/jobs.json --out dist
 ```
@@ -43,10 +43,33 @@ Standard GitHub-hosted runners in a public repository are currently free of per-
 - https://docs.github.com/en/actions/reference/limits
 - https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features
 
+## Connect the existing Pages posting queue
+
+The optional `publish` input is off by default. Enabling it is an explicit request to add the supplied future publication jobs to the existing media queue; the existing private game's hourly publisher then processes them. Only set it for reviewed production jobs, not the montage smoke test.
+
+Configure in this repository:
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Actions variable | `STUDIO_SOURCE_HOST` | `bamboo-cut-media.pages.dev` (already used for public source validation) |
+| Actions variable | `CLOUDFLARE_ACCOUNT_ID` | The 32-character account ID owning the existing media Pages project |
+| Actions secret | `CLOUDFLARE_API_TOKEN` | A token with **Account → Cloudflare Pages → Edit**, scoped to that account |
+| Optional Actions variable | `STUDIO_PAGES_PROJECT` | Defaults to `bamboo-cut-media` |
+
+Create a scoped token following [Cloudflare's CI deployment guide](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/). This permission is account-scoped Pages editing; it is not a Global API Key. Put its value directly in GitHub's encrypted Actions secret, never in chat, source files, public variables, jobs or logs.
+
+Publication jobs require `page`, `output`, `caption`, `due` (ISO date with timezone) and `platforms` in addition to their source and recipe. They must correspond to validated renders. New due times must be five minutes to 28 days in the future. Existing media paths cannot be reassigned to another publication identity.
+
+`src/publish.mjs` stages only allowlisted MP4s and a public manifest, carries over the live queue entries from the last 24 hours onward, preserves prior due times and immutable YouTube archive origins, uploads a new immutable archive before production, and checks whether the live manifest changed before writing production. A malformed/unavailable live queue aborts deployment. A repeated publication identity is deduplicated; conflicting metadata fails. No game code or account credentials are included in the media site.
+
+The final read-before-write check reduces but cannot eliminate a race with a separate publisher. Do not enable concurrent scheduled writers from the old private workflow and the new studio. The existing scene generator still has a role until its output generation has been migrated; this patch does not disable it.
+
+Before using per-video campaign conversions for recipe-suffixed filenames, update the private importer to recognize those filenames. The current experiment planner uses provider engagement metrics; it must not treat untracked conversions as zero.
+
 ## Integration status
 
-This repository does not currently replace the private project's complete production pipeline. It contains the independent editor, experiment planner and public-side batch executor.
+This repository does not currently replace the private project's complete production pipeline. It contains the independent editor, experiment planner, public-side batch executor and optional Pages queue publisher. The publisher is implemented but has not been connected to production credentials or deployed to the live media site.
 
 To connect production, the private orchestrator must export **only public media jobs**, persist private metrics/policy, trigger this public workflow independently and receive validated outputs before passing them to the existing publisher. The jobs must encode recipe IDs in resulting media paths so subsequent observations can be attributed to the correct treatment. Existing publication slots, deduplication and source archives must be retained. Publishing credentials and private metrics must not be put into public files or artifacts.
 
-Generating entirely new base gameplay scenes still needs the existing scene renderer or a separately published scene renderer; modifying existing clips alone does not remove that dependency. No private workflow is disabled and no posting account is connected by this repository. A successful demo/test is not evidence that the production integration is connected.
+Generating entirely new base gameplay scenes still needs the existing scene renderer or a separately published scene renderer; modifying existing clips alone does not remove that dependency. No private workflow is disabled and no social account is newly connected by this repository. Daily private metric collection and unattended experiment planning still need their production orchestration; a successful manual render or test does not activate them. A successful demo/test is not evidence that the production integration is connected.
