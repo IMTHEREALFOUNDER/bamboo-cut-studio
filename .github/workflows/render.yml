@@ -1,0 +1,50 @@
+name: Render montage batch
+on:
+  workflow_dispatch:
+    inputs:
+      jobs_url:
+        description: 'Public HTTPS URL of a jobs JSON file on STUDIO_SOURCE_HOST'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: studio-render
+  cancel-in-progress: false
+jobs:
+  render:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Download public render assignments
+        env:
+          JOBS_URL: ${{ inputs.jobs_url }}
+          SOURCE_HOST: ${{ vars.STUDIO_SOURCE_HOST }}
+        run: |
+          node --input-type=module - <<'JS'
+          import {writeFile} from 'node:fs/promises';
+          const url = new URL(process.env.JOBS_URL);
+          if (url.protocol !== 'https:' || !process.env.SOURCE_HOST || url.hostname !== process.env.SOURCE_HOST || url.username || url.password || url.search) throw new Error('Set STUDIO_SOURCE_HOST to the trusted public media host');
+          const response = await fetch(url, {redirect:'error', signal:AbortSignal.timeout(30000)});
+          if (!response.ok) throw new Error('Cannot read render assignments');
+          const text = await response.text();
+          if (text.length > 262144) throw new Error('Jobs file exceeds 256 KiB');
+          const jobs = JSON.parse(text);
+          if (!Array.isArray(jobs) || jobs.some(j => typeof j.input !== 'string' || !j.input.startsWith('https://'))) throw new Error('Only public HTTPS media sources are accepted');
+          await writeFile('jobs.json', text);
+          JS
+      - name: Render and validate every clip
+        env:
+          SOURCE_HOST: ${{ vars.STUDIO_SOURCE_HOST }}
+        run: node src/cli.mjs --jobs jobs.json --out dist --allow-host "$SOURCE_HOST"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: montage-batch-${{ github.run_id }}
+          path: dist/
+          retention-days: 3
